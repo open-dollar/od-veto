@@ -8,6 +8,7 @@ import {Governor, IGovernor} from '@openzeppelin/governance/Governor.sol';
 import {TimelockController} from '@openzeppelin/governance/TimelockController.sol';
 import {ODGovernor} from '@test/mock-contracts/ODGovernor.sol';
 import {ProtocolToken} from '@test/mock-contracts/ProtocolToken.sol';
+import {ECDSA} from '@openzeppelin/utils/cryptography/ECDSA.sol';
 
 /**
  * @notice ProposalState:
@@ -21,14 +22,17 @@ import {ProtocolToken} from '@test/mock-contracts/ProtocolToken.sol';
  * Executed = 7
  */
 contract Base is Test {
+  using ECDSA for bytes;
+
   address constant alice = address(0xa11ce);
   address constant bob = address(0xb0b);
   address constant caleb = address(0xca13b);
   address constant concentratedVetoPower = address(0x333);
   uint256 constant concentratedVetoWeight = TOKEN_DROP * 2;
   string constant proposal_description = 'Proposal #1: Mock Proposal';
+
   string constant pledge = 'I pledge to defend the DAO that this Veto contract is attached to from attackers';
-  bytes32 constant pledgeHash = keccak256(abi.encodePacked(pledge));
+  bytes32 public pledgeHash = abi.encodePacked(pledge).toEthSignedMessageHash();
 
   address public derek;
   uint256 public derekPk;
@@ -203,18 +207,75 @@ contract UnitTest_Veto is Base {
     assertEq(governor.getVotes(address(veto), 1), concentratedVetoWeight);
   }
 
-  function testAcceptRole() public {}
+  function testAcceptRole() public {
+    (uint8 v, bytes32 r, bytes32 s) = vm.sign(derekPk, pledgeHash);
+    bytes memory sig = abi.encodePacked(r, s, v);
+    vm.prank(derek);
+    veto.enableVeto(sig);
+    assertFalse(veto.hasRole(veto.VETO_CANDIDATE_ROLE(), derek));
+    assertTrue(veto.hasRole(veto.VETO_ROLE(), derek));
+  }
 
-  function testAcceptRoleInvalidSignatureRevert() public {}
+  function testAcceptRoleInvalidSignatureRevert() public {
+    string memory differentPledge = 'No, I do not agree to pledge';
+    bytes32 differentPledgeHash = ECDSA.toEthSignedMessageHash(abi.encodePacked(differentPledge));
+    (uint8 v, bytes32 r, bytes32 s) = vm.sign(derekPk, differentPledgeHash);
+    bytes memory sig = abi.encodePacked(r, s, v);
+    vm.startPrank(derek);
+    vm.expectRevert();
+    veto.enableVeto(sig);
+    vm.stopPrank();
+    assertTrue(veto.hasRole(veto.VETO_CANDIDATE_ROLE(), derek));
+    assertFalse(veto.hasRole(veto.VETO_ROLE(), derek));
+  }
 
-  function testAcceptRoleAndVetoWithDelegate() public {}
+  function testNoAcceptRoleAndVetoRevert() public {
+    assertTrue(veto.hasRole(veto.VETO_CANDIDATE_ROLE(), derek));
+    assertFalse(veto.hasRole(veto.VETO_ROLE(), derek));
+    uint256 propId = _propAndAllYesVote();
+    vm.startPrank(derek);
+    vm.expectRevert();
+    veto.castVote(propId);
+    vm.stopPrank();
+  }
 
-  function testAcceptRoleAndVetoWithNonDelegate() public {}
+  // with <50%
+  function testAcceptRoleAndVetoWithDelegate() public {
+    _generateSig(derekPk);
+    uint256 propId = _propAndAllYesVote();
+    vm.prank(derek);
+    veto.castVote(propId);
+    vm.roll(governor.proposalDeadline(propId) + 1);
+    assertEq(uint256(governor.state(propId)), uint256(IGovernor.ProposalState.Succeeded));
+  }
 
-  function testNoAcceptRoleAndVetoRevert() public {}
+  function testAcceptRoleAndVetoWithNonDelegate() public {
+    _generateSig(nonDelegatePk);
+    uint256 propId = _propAndAllYesVote();
+    vm.prank(nonDelegate);
+    veto.castVote(propId);
+    vm.roll(governor.proposalDeadline(propId) + 1);
+    assertEq(uint256(governor.state(propId)), uint256(IGovernor.ProposalState.Succeeded));
+  }
 
-  // delegate votes with tokens and vetos with veto contract
-  function testVoteAndVeto() public {}
+  // with 50%
+  function testAcceptRoleAndVetoWithDelegate50Percent() public {
+    _generateSig(derekPk);
+    uint256 propId = _propAndMajorityYesVote();
+    vm.prank(derek);
+    veto.castVote(propId);
+    vm.roll(governor.proposalDeadline(propId) + 1);
+    assertEq(uint256(governor.state(propId)), uint256(IGovernor.ProposalState.Defeated));
+  }
+
+  function testAcceptRoleAndVetoWithNonDelegate50Percent() public {
+    _generateSig(nonDelegatePk);
+    uint256 propId = _propAndMajorityYesVote();
+    vm.prank(nonDelegate);
+    veto.castVote(propId);
+    vm.roll(governor.proposalDeadline(propId) + 1);
+    assertEq(uint256(governor.state(propId)), uint256(IGovernor.ProposalState.Defeated));
+  }
 
   // with <50%
   function testCastVetoWithDelegate() public {
@@ -254,6 +315,27 @@ contract UnitTest_Veto is Base {
     assertEq(uint256(governor.state(propId)), uint256(IGovernor.ProposalState.Defeated));
   }
 
+  // delegate votes Yes with tokens and vetos No with veto contract
+  function testVoteAndVeto() public {
+    _forceVetoRole(alice);
+    assertTrue(veto.hasRole(veto.VETO_ROLE(), alice));
+    uint256 propId = _propAndAllYesVote();
+    vm.prank(alice);
+    veto.castVote(propId);
+    vm.roll(governor.proposalDeadline(propId) + 1);
+    assertEq(uint256(governor.state(propId)), uint256(IGovernor.ProposalState.Succeeded));
+  }
+
+  function testVoteAndVeto50Percent() public {
+    _forceVetoRole(alice);
+    assertTrue(veto.hasRole(veto.VETO_ROLE(), alice));
+    uint256 propId = _propAndMajorityYesVote();
+    vm.prank(alice);
+    veto.castVote(propId);
+    vm.roll(governor.proposalDeadline(propId) + 1);
+    assertEq(uint256(governor.state(propId)), uint256(IGovernor.ProposalState.Defeated));
+  }
+
   function _propAndAllYesVote() internal returns (uint256) {
     uint256 propId = _createProposalAndWarp();
     vm.prank(alice);
@@ -282,6 +364,8 @@ contract UnitTest_Veto is Base {
 
   function _generateSig(uint256 privateKey) internal returns (bytes memory sig) {
     (uint8 v, bytes32 r, bytes32 s) = vm.sign(privateKey, pledgeHash);
-    sig = abi.encodePacked(pledgeHash, v, r, s);
+    sig = abi.encodePacked(r, s, v);
+    vm.prank(vm.addr(privateKey));
+    veto.enableVeto(sig);
   }
 }

@@ -5,6 +5,7 @@ import {IVeto} from '@interfaces/IVeto.sol';
 import {IGovernor} from '@openzeppelin/governance/IGovernor.sol';
 import {SignatureChecker} from '@openzeppelin/utils/cryptography/SignatureChecker.sol';
 import {Strings} from '@openzeppelin/utils/Strings.sol';
+import {ECDSA} from '@openzeppelin/utils/cryptography/ECDSA.sol';
 
 contract Veto is IVeto {
   IGovernor public governor;
@@ -44,7 +45,7 @@ contract Veto is IVeto {
    * @param signature A signature over the message in `pledge`.
    */
   function enableVeto(bytes memory signature) external onlyRole(VETO_CANDIDATE_ROLE) {
-    if (!SignatureChecker.isValidSignatureNow(msg.sender, _toEthSignedMessageHash(bytes(pledge)), signature)) {
+    if (!SignatureChecker.isValidSignatureNow(msg.sender, ECDSA.toEthSignedMessageHash(bytes(pledge)), signature)) {
       revert InvalidSignature();
     }
     _grantRole(VETO_ROLE, msg.sender);
@@ -69,19 +70,5 @@ contract Veto is IVeto {
     string calldata reason
   ) public virtual onlyRole(VETO_ROLE) returns (uint256 balance) {
     return governor.castVoteWithReason(proposalId, uint8(VoteType.Against), reason);
-  }
-
-  /**
-   * @dev Returns the keccak256 digest of an ERC-191 signed data with version
-   * `0x45` (`personal_sign` messages).
-   *
-   * The digest is calculated by prefixing an arbitrary `message` with
-   * `"\x19Ethereum Signed Message:\n" + len(message)` and hashing the result. It corresponds with the
-   * hash signed when using the https://eth.wiki/json-rpc/API#eth_sign[`eth_sign`] JSON-RPC method.
-   *
-   * See {ECDSA-recover}.
-   */
-  function _toEthSignedMessageHash(bytes memory message) internal pure returns (bytes32) {
-    return keccak256(bytes.concat('\x19Ethereum Signed Message:\n', bytes(Strings.toString(message.length)), message));
   }
 }
