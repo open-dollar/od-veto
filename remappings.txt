@@ -1,5 +1,6 @@
-@openzeppelin/=lib/openzeppelin-contracts/contracts/
+@openzeppelin/=node_modules/@openzeppelin/contracts/
 
+@script/=script/
 @contracts/=src/contracts/
 @interfaces/=src/interfaces/
 @test/=test/
