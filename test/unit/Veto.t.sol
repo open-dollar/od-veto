@@ -24,14 +24,16 @@ contract Base is Test {
   address constant alice = address(0xa11ce);
   address constant bob = address(0xb0b);
   address constant caleb = address(0xca13b);
-  address constant nonDelegate = address(0x101);
-  address constant concentratedVetoPower = address(0x666);
-  uint256 constant concentratedVetoWeight = TOKEN_DROP * 3;
-
+  address constant concentratedVetoPower = address(0x333);
+  uint256 constant concentratedVetoWeight = TOKEN_DROP * 2;
+  string constant proposal_description = 'Proposal #1: Mock Proposal';
   string constant pledge = 'I pledge to defend the DAO that this Veto contract is attached to from attackers';
   bytes32 constant pledgeHash = keccak256(abi.encodePacked(pledge));
 
-  string constant proposal_description = 'Proposal #1: Mock Proposal';
+  address public derek;
+  uint256 public derekPk;
+  address public nonDelegate;
+  uint256 public nonDelegatePk;
 
   ODGovernor public governor;
   Veto public veto;
@@ -43,6 +45,9 @@ contract Base is Test {
 
   function setUp() public virtual {
     address[] memory members = new address[](0);
+
+    (derek, derekPk) = makeAddrAndKey('alice');
+    (nonDelegate, nonDelegatePk) = makeAddrAndKey('rando');
 
     voteToken = new ProtocolToken('voteToken', 'VT');
     timelockController = new TimelockController(TEST_INIT_VOTING_DELAY, members, members, deployer);
@@ -68,6 +73,7 @@ contract Base is Test {
     for (uint256 i = 0; i < delegates.length; i++) {
       voteToken.mint(delegates[i], TOKEN_DROP);
     }
+    voteToken.mint(derek, TOKEN_DROP);
     voteToken.mint(concentratedVetoPower, concentratedVetoWeight);
     uint256 _ts = voteToken.totalSupply();
     voteToken.mint(deployer, TOKEN_SUPPLY - _ts);
@@ -81,12 +87,18 @@ contract Base is Test {
   }
 
   function _createProposal() internal returns (uint256 propId) {
-    (address[] memory targets, uint256[] memory values, bytes[] memory calldatas) = __createProposalArgs();
+    (address[] memory targets, uint256[] memory values, bytes[] memory calldatas) = _createProposalArgs();
     vm.prank(alice);
     propId = governor.propose(targets, values, calldatas, proposal_description);
   }
 
-  function __createProposalArgs()
+  function _createProposalAndWarp() internal returns (uint256 propId) {
+    vm.roll(2);
+    propId = _createProposal();
+    vm.roll(6);
+  }
+
+  function _createProposalArgs()
     internal
     view
     returns (address[] memory targets, uint256[] memory values, bytes[] memory calldatas)
@@ -149,9 +161,7 @@ contract Test_SetUp is Base {
   }
 
   function testVoteOnProposalDefeat() public {
-    vm.roll(2);
-    uint256 propId = _createProposal();
-    vm.roll(6);
+    uint256 propId = _createProposalAndWarp();
     vm.prank(alice);
     governor.castVote(propId, 0); // against
     vm.prank(bob);
@@ -164,9 +174,7 @@ contract Test_SetUp is Base {
   }
 
   function testVoteOnProposalSucceed() public {
-    vm.roll(2);
-    uint256 propId = _createProposal();
-    vm.roll(6);
+    uint256 propId = _createProposalAndWarp();
     vm.prank(alice);
     governor.castVote(propId, 1);
     vm.prank(bob);
@@ -183,7 +191,7 @@ contract UnitTest_Veto is Base {
   function setUp() public override {
     super.setUp();
 
-    veto.grantRole(veto.VETO_CANDIDATE_ROLE(), alice);
+    veto.grantRole(veto.VETO_CANDIDATE_ROLE(), derek);
     veto.grantRole(veto.VETO_CANDIDATE_ROLE(), nonDelegate);
 
     vm.prank(concentratedVetoPower);
@@ -205,22 +213,75 @@ contract UnitTest_Veto is Base {
 
   function testNoAcceptRoleAndVetoRevert() public {}
 
+  // delegate votes with tokens and vetos with veto contract
+  function testVoteAndVeto() public {}
+
+  // with <50%
   function testCastVetoWithDelegate() public {
-    _forceVetoRole(alice);
-    vm.roll(2);
-    uint256 propId = _createProposal();
-    vm.roll(6);
-    vm.prank(alice);
-    governor.castVote(propId, 1);
-    vm.prank(bob);
-    governor.castVote(propId, 1);
+    _forceVetoRole(derek);
+    uint256 propId = _propAndAllYesVote();
+    vm.prank(derek);
+    veto.castVote(propId);
+    vm.roll(governor.proposalDeadline(propId) + 1);
+    assertEq(uint256(governor.state(propId)), uint256(IGovernor.ProposalState.Succeeded));
   }
 
   function testCastVetoWithNonDelegate() public {
     _forceVetoRole(nonDelegate);
+    uint256 propId = _propAndAllYesVote();
+    vm.prank(nonDelegate);
+    veto.castVote(propId);
+    vm.roll(governor.proposalDeadline(propId) + 1);
+    assertEq(uint256(governor.state(propId)), uint256(IGovernor.ProposalState.Succeeded));
+  }
+
+  // with 50%
+  function testCastVetoWithDelegate50Percent() public {
+    _forceVetoRole(derek);
+    uint256 propId = _propAndMajorityYesVote();
+    vm.prank(derek);
+    veto.castVote(propId);
+    vm.roll(governor.proposalDeadline(propId) + 1);
+    assertEq(uint256(governor.state(propId)), uint256(IGovernor.ProposalState.Defeated));
+  }
+
+  function testCastVetoWithNonDelegate50Percent() public {
+    _forceVetoRole(nonDelegate);
+    uint256 propId = _propAndMajorityYesVote();
+    vm.prank(nonDelegate);
+    veto.castVote(propId);
+    vm.roll(governor.proposalDeadline(propId) + 1);
+    assertEq(uint256(governor.state(propId)), uint256(IGovernor.ProposalState.Defeated));
+  }
+
+  function _propAndAllYesVote() internal returns (uint256) {
+    uint256 propId = _createProposalAndWarp();
+    vm.prank(alice);
+    governor.castVote(propId, 1);
+    vm.prank(bob);
+    governor.castVote(propId, 1);
+    vm.prank(caleb);
+    governor.castVote(propId, 1);
+    return propId;
+  }
+
+  function _propAndMajorityYesVote() internal returns (uint256) {
+    uint256 propId = _createProposalAndWarp();
+    vm.prank(alice);
+    governor.castVote(propId, 1);
+    vm.prank(bob);
+    governor.castVote(propId, 1);
+    vm.prank(caleb);
+    governor.castVote(propId, 2);
+    return propId;
   }
 
   function _forceVetoRole(address vetoer) internal {
-    veto.grantRole(veto.VETO_ROLE, vetoer);
+    veto.grantRole(veto.VETO_ROLE(), vetoer);
+  }
+
+  function _generateSig(uint256 privateKey) internal returns (bytes memory sig) {
+    (uint8 v, bytes32 r, bytes32 s) = vm.sign(privateKey, pledgeHash);
+    sig = abi.encodePacked(pledgeHash, v, r, s);
   }
 }
