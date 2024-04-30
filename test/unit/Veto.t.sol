@@ -9,6 +9,7 @@ import {TimelockController} from '@openzeppelin/governance/TimelockController.so
 import {ODGovernor} from '@test/mock-contracts/ODGovernor.sol';
 import {ProtocolToken} from '@test/mock-contracts/ProtocolToken.sol';
 import {ECDSA} from '@openzeppelin/utils/cryptography/ECDSA.sol';
+import {ENS} from '@ens/registry/ENS.sol';
 
 /**
  * @notice ProposalState:
@@ -24,14 +25,15 @@ import {ECDSA} from '@openzeppelin/utils/cryptography/ECDSA.sol';
 contract Base is Test {
   using ECDSA for bytes;
 
-  address constant alice = address(0xa11ce);
-  address constant bob = address(0xb0b);
-  address constant caleb = address(0xca13b);
-  address constant concentratedVetoPower = address(0x333);
-  uint256 constant concentratedVetoWeight = TOKEN_DROP * 2;
-  string constant proposal_description = 'Proposal #1: Mock Proposal';
+  ENS internal constant _ENS = ENS(address(0x0));
+  address public constant alice = address(0xa11ce);
+  address public constant bob = address(0xb0b);
+  address public constant caleb = address(0xca13b);
+  address public constant concentratedVetoPower = address(0x333);
+  uint256 public constant concentratedVetoWeight = TOKEN_DROP * 2;
+  string public constant proposal_description = 'Proposal #1: Mock Proposal';
 
-  string constant pledge = 'I pledge to defend the DAO that this Veto contract is attached to from attackers';
+  string public constant pledge = 'I pledge to defend the DAO that this Veto contract is attached to from attackers';
   bytes32 public pledgeHash = abi.encodePacked(pledge).toEthSignedMessageHash();
 
   address public derek;

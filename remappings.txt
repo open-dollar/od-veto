@@ -1,4 +1,5 @@
 @openzeppelin/=node_modules/@openzeppelin/contracts/
+@ens/=lib/ens-contracts/contracts/
 
 @script/=script/
 @contracts/=src/contracts/
