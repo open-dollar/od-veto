@@ -6,8 +6,6 @@ import {IGovernor} from '@openzeppelin/governance/IGovernor.sol';
 import {SignatureChecker} from '@openzeppelin/utils/cryptography/SignatureChecker.sol';
 import {Strings} from '@openzeppelin/utils/Strings.sol';
 import {ECDSA} from '@openzeppelin/utils/cryptography/ECDSA.sol';
-import {ReverseClaimer} from '@ens/reverseRegistrar/ReverseClaimer.sol';
-import {ENS} from '@ens/registry/ENS.sol';
 
 contract Veto is IVeto {
   IGovernor public governor;

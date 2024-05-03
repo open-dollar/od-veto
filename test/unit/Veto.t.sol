@@ -9,7 +9,6 @@ import {TimelockController} from '@openzeppelin/governance/TimelockController.so
 import {ODGovernor} from '@test/mock-contracts/ODGovernor.sol';
 import {ProtocolToken} from '@test/mock-contracts/ProtocolToken.sol';
 import {ECDSA} from '@openzeppelin/utils/cryptography/ECDSA.sol';
-import {ENS} from '@ens/registry/ENS.sol';
 
 /**
  * @notice ProposalState:
@@ -25,7 +24,6 @@ import {ENS} from '@ens/registry/ENS.sol';
 contract Base is Test {
   using ECDSA for bytes;
 
-  ENS internal constant _ENS = ENS(address(0x0));
   address public constant alice = address(0xa11ce);
   address public constant bob = address(0xb0b);
   address public constant caleb = address(0xca13b);
