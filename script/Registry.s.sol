@@ -5,8 +5,8 @@ pragma solidity 0.8.20;
 
 address constant MAINNET_OD_GOVERNOR = 0xf704735CE81165261156b41D33AB18a08803B86F;
 string constant MAINNET_OD_VETO_DELEGATE_PLEDGE =
-  'This should be a hash to a IPFS file location containing the pledge for OD veto delegates.';
-
+  'I agree to use this contract for the express purpose of the protection of the Open Dollar protocol from sophisticated governance attacks, malicious actors, and proposals that would violate the terms or spirit of the Open Dollar protocol.';
+// address constant MAINNET_VETO = 0x;
 // --- Anvil Testnet ---
 
 // Token

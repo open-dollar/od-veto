@@ -116,7 +116,7 @@ contract Base is Test {
   }
 }
 
-contract Test_SetUp is Base {
+contract TestSetUp is Base {
   function testGovernorSetUp() public {
     assertEq(governor.votingDelay(), TEST_INIT_VOTING_DELAY);
     assertEq(governor.votingPeriod(), TEST_INIT_VOTING_PERIOD);
@@ -191,7 +191,7 @@ contract Test_SetUp is Base {
   }
 }
 
-contract UnitTest_Veto is Base {
+contract UnitTestVeto is Base {
   function setUp() public override {
     super.setUp();
 
